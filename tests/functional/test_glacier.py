@@ -13,54 +13,83 @@
 # limitations under the License.
 import io
 
-from tests import BaseSessionTest, ClientHTTPStubber
+from tests import ClientHTTPStubber
 
 
-class TestGlacierHandlers(BaseSessionTest):
-    def setUp(self):
-        super().setUp()
-        self.region = 'us-west-2'
-        self.client = self.session.create_client('glacier', self.region)
-        self.http_stubber = ClientHTTPStubber(self.client)
+def create_glacier_client(patched_session):
+    return patched_session.create_client('glacier', 'us-west-2')
 
-    def test_can_list_vaults_without_account_id(self):
-        with self.http_stubber:
-            self.http_stubber.add_response()
-            self.client.list_vaults()
-            url = self.http_stubber.requests[0].url
-            self.assertIn('/-/vaults', url)
 
-    def test_can_list_vaults_with_account_id(self):
-        with self.http_stubber:
-            self.http_stubber.add_response()
-            self.client.list_vaults(accountId='foo')
-            url = self.http_stubber.requests[0].url
-            self.assertIn('/foo/vaults', url)
+def test_can_list_vaults_without_account_id(patched_session):
+    client = create_glacier_client(patched_session)
+    with ClientHTTPStubber(client) as http_stubber:
+        http_stubber.add_response()
+        client.list_vaults()
+        assert '/-/vaults' in http_stubber.requests[0].url
 
-    def test_can_upload_archive(self):
-        with self.http_stubber:
-            self.http_stubber.add_response(status=201)
-            self.client.upload_archive(
-                vaultName='test-vault',
-                body=io.BytesIO(b'bytes content'),
-            )
-            headers = self.http_stubber.requests[0].headers
-            self.assertIn('x-amz-content-sha256', headers)
-            self.assertIn('x-amz-sha256-tree-hash', headers)
 
-    def test_can_upload_archive_from_bytes(self):
-        with self.http_stubber:
-            self.http_stubber.add_response(status=201)
-            self.client.upload_archive(
-                vaultName='test-vault', body=b'bytes content'
-            )
-            headers = self.http_stubber.requests[0].headers
-            self.assertIn('x-amz-content-sha256', headers)
-            self.assertIn('x-amz-sha256-tree-hash', headers)
+def test_can_list_vaults_with_account_id(patched_session):
+    client = create_glacier_client(patched_session)
+    with ClientHTTPStubber(client) as http_stubber:
+        http_stubber.add_response()
+        client.list_vaults(accountId='foo')
+        assert '/foo/vaults' in http_stubber.requests[0].url
 
-    def test_glacier_version_header_added(self):
-        with self.http_stubber:
-            self.http_stubber.add_response()
-            self.client.list_vaults()
-            headers = self.http_stubber.requests[0].headers
-            self.assertIn('x-amz-glacier-version', headers)
+
+def test_can_upload_archive(patched_session):
+    client = create_glacier_client(patched_session)
+    with ClientHTTPStubber(client) as http_stubber:
+        http_stubber.add_response(status=201)
+        client.upload_archive(
+            vaultName='test-vault',
+            body=io.BytesIO(b'bytes content'),
+        )
+        headers = http_stubber.requests[0].headers
+        assert 'x-amz-content-sha256' in headers
+        assert 'x-amz-sha256-tree-hash' in headers
+
+
+def test_can_upload_archive_from_bytes(patched_session):
+    client = create_glacier_client(patched_session)
+    with ClientHTTPStubber(client) as http_stubber:
+        http_stubber.add_response(status=201)
+        client.upload_archive(vaultName='test-vault', body=b'bytes content')
+        headers = http_stubber.requests[0].headers
+        assert 'x-amz-content-sha256' in headers
+        assert 'x-amz-sha256-tree-hash' in headers
+
+
+def test_can_upload_multipart_part(patched_session):
+    client = create_glacier_client(patched_session)
+    with ClientHTTPStubber(client) as http_stubber:
+        http_stubber.add_response(status=204)
+        client.upload_multipart_part(
+            vaultName='test-vault',
+            uploadId='upload-id',
+            body=io.BytesIO(b'bytes content'),
+        )
+        headers = http_stubber.requests[0].headers
+        assert 'x-amz-content-sha256' in headers
+        assert 'x-amz-sha256-tree-hash' in headers
+
+
+def test_can_upload_multipart_part_from_bytes(patched_session):
+    client = create_glacier_client(patched_session)
+    with ClientHTTPStubber(client) as http_stubber:
+        http_stubber.add_response(status=204)
+        client.upload_multipart_part(
+            vaultName='test-vault',
+            uploadId='upload-id',
+            body=b'bytes content',
+        )
+        headers = http_stubber.requests[0].headers
+        assert 'x-amz-content-sha256' in headers
+        assert 'x-amz-sha256-tree-hash' in headers
+
+
+def test_glacier_version_header_added(patched_session):
+    client = create_glacier_client(patched_session)
+    with ClientHTTPStubber(client) as http_stubber:
+        http_stubber.add_response()
+        client.list_vaults()
+        assert 'x-amz-glacier-version' in http_stubber.requests[0].headers
